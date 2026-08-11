@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "441696267939",
+    "project_id": "violence-detection-syste-bc9c9",
+    "storage_bucket": "violence-detection-syste-bc9c9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:441696267939:android:a109a70d7b0464e7aa9916",
+        "android_client_info": {
+          "package_name": "com.example.violence_detection_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBmu73NdTH_Exg4Fhg1vgETbvlJFiKczq8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
