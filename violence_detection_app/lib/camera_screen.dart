@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_mjpeg/flutter_mjpeg.dart';
 import 'services/camera_api.dart';
 import 'services/api_service.dart';
 import 'camera_add_screen.dart';
@@ -23,12 +24,28 @@ class _CameraScreenState extends State<CameraScreen> {
     loadCameras();
   }
 
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   Future<void> loadCameras() async {
     setState(() => loading = true);
     try {
       final data = await cameraApi.getCameras();
+      
+      // Fetch active camera status
+      final statusResponse = await http.get(Uri.parse("${ApiService.baseUrl}/cameras/status"));
+      
       setState(() {
         cameras = data;
+        activeCameraIds.clear();
+        if (statusResponse.statusCode == 200 && statusResponse.body.isNotEmpty) {
+          int? activeId = int.tryParse(statusResponse.body);
+          if (activeId != null) {
+            activeCameraIds.add(activeId);
+          }
+        }
         loading = false;
       });
     } catch (e) {
@@ -37,7 +54,7 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  Future<void> startDetection(int cameraId) async {
+  Future<void> startDetection(int cameraId, String rtspUrl) async {
     try {
       final response = await http.post(
         Uri.parse("${ApiService.baseUrl}/cameras/startDetection/$cameraId"),
@@ -62,13 +79,13 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  Future<void> stopDetection() async {
+  Future<void> stopDetection(int cameraId) async {
     try {
       await http.post(
         Uri.parse("${ApiService.baseUrl}/cameras/stopDetection"),
       );
       setState(() {
-        activeCameraIds.clear();
+        activeCameraIds.remove(cameraId);
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Detection stopped")),
@@ -78,6 +95,49 @@ class _CameraScreenState extends State<CameraScreen> {
         SnackBar(content: Text("Error: $e")),
       );
     }
+  }
+
+  Future<void> deleteCamera(int id) async {
+    try {
+      bool success = await cameraApi.deleteCamera(id);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Camera deleted")),
+        );
+        loadCameras();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to delete camera")),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
+    }
+  }
+
+  void _confirmDelete(int id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Camera"),
+        content: const Text("Are you sure you want to delete this camera?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              deleteCamera(id);
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -140,18 +200,52 @@ class _CameraScreenState extends State<CameraScreen> {
                             backgroundColor: Colors.green,
                             labelStyle: TextStyle(color: Colors.white),
                           ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _confirmDelete(camId),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 6),
                     Text("RTSP: ${camera["rtspUrl"] ?? ""}"),
                     Text("Status: ${camera["status"] ?? ""}"),
                     const SizedBox(height: 10),
+                    
+                    // Show live video if active
+                    if (isActive)
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.green, width: 2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: AspectRatio(
+                            aspectRatio: 4 / 3, // Standard camera aspect ratio
+                            child: Mjpeg(
+                              isLive: true,
+                              stream: camera["rtspUrl"] ?? "",
+                              error: (context, error, stack) {
+                                return Center(
+                                  child: Text(
+                                    "Error connecting to stream.\nEnsure URL ends with /video",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                      
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         if (!isActive)
                           ElevatedButton.icon(
-                            onPressed: () => startDetection(camId),
+                            onPressed: () => startDetection(camId, camera["rtspUrl"] ?? ""),
                             icon: const Icon(Icons.play_arrow),
                             label: const Text("Start Monitoring"),
                             style: ElevatedButton.styleFrom(
@@ -160,7 +254,7 @@ class _CameraScreenState extends State<CameraScreen> {
                           )
                         else
                           ElevatedButton.icon(
-                            onPressed: stopDetection,
+                            onPressed: () => stopDetection(camId),
                             icon: const Icon(Icons.stop),
                             label: const Text("Stop"),
                             style: ElevatedButton.styleFrom(

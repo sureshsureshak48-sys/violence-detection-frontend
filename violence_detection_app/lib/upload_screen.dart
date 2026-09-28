@@ -13,19 +13,7 @@ class UploadScreen extends StatefulWidget {
 class _UploadScreenState extends State<UploadScreen> {
   String detectionResult = "";
   final MediaApi mediaApi = MediaApi();
-
-  // ---------------- IMAGE ----------------
-  Future<void> pickImage() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-    );
-
-    if (result != null) {
-      String filePath = result.files.single.path!;
-      String apiResponse = await mediaApi.uploadImage(filePath);
-      _showObjectResult(apiResponse);
-    }
-  }
+  bool isLoading = false;
 
   Future<void> pickVideo() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -33,47 +21,34 @@ class _UploadScreenState extends State<UploadScreen> {
     );
 
     if (result != null) {
+      setState(() => isLoading = true);
       String filePath = result.files.single.path!;
       String apiResponse = await mediaApi.uploadVideo(filePath);
       _showVideoResult(apiResponse);
+      setState(() => isLoading = false);
     }
   }
+
   Future<void> pickAudio() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.audio,
-    );
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.audio,
+      );
 
-    if (result != null) {
-      String filePath = result.files.single.path!;
-      String apiResponse = await mediaApi.uploadAudio(filePath);
-      _showAudioResult(apiResponse);
+      if (result != null) {
+        setState(() => isLoading = true);
+        String filePath = result.files.single.path!;
+        String apiResponse = await mediaApi.uploadAudio(filePath);
+        _showAudioResult(apiResponse);
+        setState(() => isLoading = false);
+      }
+    } catch (e) {
+      setState(() {
+        detectionResult = "Error uploading audio: $e";
+        isLoading = false;
+      });
+      _showSnack("Error: $e");
     }
-  }
-
-  void _showObjectResult(String apiResponse) {
-    Map<String, dynamic> data = jsonDecode(apiResponse);
-
-    String summary = "";
-
-    if (data.containsKey("violence")) {
-      bool violence = data["violence"] ?? false;
-      double confidence = (data["confidence"] ?? 0).toDouble();
-      String type = data["overall_violence_type"] ?? "N/A";
-
-      summary = violence ? "⚠️ VIOLENCE DETECTED\n" : "✅ No Violence\n";
-      summary += "Type: $type\nConfidence: $confidence%\n\n";
-    }
-
-    Map<String, dynamic> objects = data["objects"] ?? {};
-    objects.forEach((key, value) {
-      summary += "${key.toUpperCase()} : $value\n";
-    });
-
-    setState(() {
-      detectionResult = summary;
-    });
-
-    _showSnack("Image analyzed successfully");
   }
 
   // ---------------- Display: video/violence result ----------------
@@ -83,14 +58,21 @@ class _UploadScreenState extends State<UploadScreen> {
     bool violence = data["violence"] ?? false;
     double confidence = (data["confidence"] ?? 0).toDouble();
     String violenceType = data["overall_violence_type"] ?? "N/A";
+    String coreContent = data["core_content"] ?? "";
     Map<String, dynamic> objects = data["objects"] ?? {};
 
     String summary = violence
         ? "⚠️ VIOLENCE DETECTED\n"
-        : "✅ No Violence Detected\n";
+        : "✅ No Violence Detected\n\n";
 
-    summary += "Type: $violenceType\n";
-    summary += "Confidence: $confidence%\n\n";
+    if (violence) {
+      summary += "Type: $violenceType\n";
+      summary += "Confidence: $confidence%\n";
+      if (coreContent.isNotEmpty) {
+        summary += "Description: $coreContent\n";
+      }
+      summary += "\n";
+    }
 
     objects.forEach((key, value) {
       summary += "${key.toUpperCase()} : $value\n";
@@ -104,23 +86,33 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   void _showAudioResult(String apiResponse) {
-    Map<String, dynamic> data = jsonDecode(apiResponse);
+    try {
+      Map<String, dynamic> data = jsonDecode(apiResponse);
 
-    bool violence = data["violence"] ?? false;
-    String audioResult = data["audio_result"] ?? "Unknown";
-    String type = data["overall_violence_type"] ?? "N/A";
+      bool violence = data["violence"] ?? false;
+      String audioResult = data["audio_result"] ?? "Unknown";
+      String type = data["overall_violence_type"] ?? "N/A";
+      String coreContent = data["core_content"] ?? "";
 
-    String summary = violence
-        ? "⚠️ VIOLENCE DETECTED (Audio)\n"
-        : "✅ Normal Audio\n";
+      String summary = violence
+          ? "⚠️ VIOLENCE DETECTED (Audio)\n"
+          : "✅ Normal Audio\n";
 
-    summary += "Result: $audioResult\nType: $type\n";
+      summary += "Result: $audioResult\nType: $type\n";
+      if (coreContent.isNotEmpty) {
+        summary += "Description: $coreContent\n";
+      }
 
-    setState(() {
-      detectionResult = summary;
-    });
+      setState(() {
+        detectionResult = summary;
+      });
 
-    _showSnack(violence ? "Violence detected in audio!" : "Audio analysis complete");
+      _showSnack(violence ? "Violence detected in audio!" : "Audio analysis complete");
+    } catch (e) {
+      setState(() {
+        detectionResult = "Response Error: $apiResponse";
+      });
+    }
   }
 
   void _showSnack(String msg) {
@@ -130,11 +122,24 @@ class _UploadScreenState extends State<UploadScreen> {
   }
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Media Upload"),
-        centerTitle: true,
-      ),
+    return WillPopScope(
+      onWillPop: () async {
+        if (isLoading) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Processing will be cancelled! Please wait until analysis is complete."),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("Media Upload"),
+          centerTitle: true,
+        ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -143,7 +148,7 @@ class _UploadScreenState extends State<UploadScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50,
+                color: const Color(0xFF1E88E5).withOpacity(0.15),
                 borderRadius: BorderRadius.circular(15),
               ),
               child: const Column(
@@ -151,7 +156,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   Icon(
                     Icons.cloud_upload,
                     size: 60,
-                    color: Colors.blue,
+                    color: Color(0xFF1E88E5),
                   ),
                   SizedBox(height: 10),
                   Text(
@@ -164,6 +169,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   SizedBox(height: 5),
                   Text(
                     "Upload image or video for AI analysis",
+                    style: TextStyle(color: Colors.grey),
                   ),
                 ],
               ),
@@ -178,30 +184,6 @@ class _UploadScreenState extends State<UploadScreen> {
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
               children: [
-                Card(
-                  elevation: 5,
-                  child: InkWell(
-                    onTap: pickImage,
-                    child: const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.image,
-                          size: 60,
-                          color: Colors.green,
-                        ),
-                        SizedBox(height: 10),
-                        Text(
-                          "Upload Image",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
                 Card(
                   elevation: 5,
                   child: InkWell(
@@ -250,20 +232,28 @@ class _UploadScreenState extends State<UploadScreen> {
                 padding: const EdgeInsets.all(16),
                 child: SizedBox(
                   width: double.infinity,
-                  child: Text(
-                    detectionResult.isEmpty
-                        ? "No Result Yet"
-                        : detectionResult,
-                    style: const TextStyle(
-                      fontSize: 16,
-                    ),
-                  ),
+                  child: isLoading 
+                      ? const Center(child: Column(
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 10),
+                            Text("Processing Media with AI...")
+                          ],
+                        ))
+                      : Text(
+                          detectionResult.isEmpty
+                              ? "No Result Yet"
+                              : detectionResult,
+                          style: const TextStyle(
+                            fontSize: 16,
+                          ),
+                        ),
                 ),
               ),
             ),
           ],
         ),
       ),
-    );
+    ));
   }
 }

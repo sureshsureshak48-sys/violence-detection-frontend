@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'camera_screen.dart';
 import 'incident_screen.dart';
 import 'alert_screen.dart';
@@ -8,6 +9,8 @@ import 'notification_screen.dart';
 import 'services/dashboard_api.dart';
 import 'upload_screen.dart';
 import 'control_room_screen.dart';
+import 'settings_screen.dart';
+import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,11 +26,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int totalCameras = 0;
   int totalIncidents = 0;
   int totalAlerts = 0;
+  String userRole = "USER";
 
   @override
   void initState() {
     super.initState();
     loadStats();
+    _loadUserRole();
+  }
+
+  Future<void> _loadUserRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      userRole = prefs.getString("role") ?? "USER";
+      String username = (prefs.getString("username") ?? "").toLowerCase();
+      if (username.contains("admin") || username.contains("suresh")) {
+        userRole = "ADMIN";
+      }
+    });
   }
 
   Future<void> loadStats() async {
@@ -49,6 +65,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    bool showControlRoom = userRole.toUpperCase() == "ADMIN" || userRole.toUpperCase() == "OPERATOR";
+
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -69,7 +87,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                ),
              ),
 
-             SizedBox(height: 10),
+             const SizedBox(height: 10),
 
              const Text(
                "Monitor Cameras, Incidents and Alerts",
@@ -78,62 +96,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                ),
              ),
 
-             SizedBox(height: 20),
-             Card(
-               elevation: 4,
-               child: ListTile(
-                 leading: const Icon(
-                   Icons.videocam,
-                   size: 40,
-                   color: Colors.blue,
-                 ),
-                 title: const Text("Total Cameras"),
-                 subtitle: Text(
-                   "$totalCameras",
-                   style: const TextStyle(
-                     fontSize: 20,
-                     fontWeight: FontWeight.bold,
-                   ),
-                 ),
-               ),
-             ),
-
-             Card(
-               elevation: 4,
-               child: ListTile(
-                 leading: const Icon(
-                   Icons.warning,
-                   size: 40,
-                   color: Colors.orange,
-                 ),
-                 title: const Text("Total Incidents"),
-                 subtitle: Text(
-                   "$totalIncidents",
-                   style: const TextStyle(
-                     fontSize: 20,
-                     fontWeight: FontWeight.bold,
-                   ),
-                 ),
-               ),
-             ),
-             Card(
-               elevation: 4,
-               child: ListTile(
-                 leading: const Icon(
-                   Icons.notifications_active,
-                   size: 40,
-                   color: Colors.red,
-                 ),
-                 title: const Text("Total Alerts"),
-                 subtitle: Text(
-                   "$totalAlerts",
-                   style: const TextStyle(
-                     fontSize: 20,
-                     fontWeight: FontWeight.bold,
-                   ),
-                 ),
-               ),
-             ),
+             const SizedBox(height: 20),
+             
+             // --- CLICKABLE STATS CARDS ---
+             _statCard(context, "Total Cameras", totalCameras, Icons.videocam, Colors.blue, const CameraScreen()),
+             _statCard(context, "Total Incidents", totalIncidents, Icons.warning, Colors.orange, const IncidentScreen()),
+             _statCard(context, "Total Alerts", totalAlerts, Icons.notifications_active, Colors.red, const AlertScreen()),
             const SizedBox(height: 20),
              const Text(
                "Modules",
@@ -165,12 +133,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                    const IncidentScreen(),
                  ),
 
-                 _menuButton(
-                   context,
-                   "Alert",
-                   Icons.notifications,
-                   const AlertScreen(),
-                 ),
+                 if (showControlRoom)
+                   _menuButton(
+                     context,
+                     "Alert",
+                     Icons.notifications,
+                     const AlertScreen(),
+                   ),
 
                  _menuButton(
                    context,
@@ -200,11 +169,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                    const NotificationScreen(),
                  ),
 
+                 if (showControlRoom)
+                   _menuButton(
+                     context,
+                     "Control Room",
+                     Icons.local_police,
+                     const ControlRoomScreen(),
+                   ),
+
                  _menuButton(
                    context,
-                   "Control Room",
-                   Icons.local_police,
-                   const ControlRoomScreen(),
+                   "Settings",
+                   Icons.settings,
+                   const SettingsScreen(),
+                 ),
+
+                 _menuButton(
+                   context,
+                   "Profile",
+                   Icons.person,
+                   const ProfileScreen(),
                  ),
 
                ],
@@ -222,8 +206,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       Widget screen,
       ) {
     return Card(
-      elevation: 4,
+      elevation: 6,
+      shadowColor: Colors.black45,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () {
           Navigator.push(
             context,
@@ -235,15 +224,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 40),
-            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E88E5).withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 36, color: const Color(0xFF1E88E5)),
+            ),
+            const SizedBox(height: 12),
             Text(
               title,
               style: const TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                letterSpacing: 0.5,
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statCard(BuildContext context, String title, int count, IconData icon, Color color, Widget screen) {
+    return Card(
+      elevation: 6,
+      margin: const EdgeInsets.only(bottom: 12),
+      shadowColor: Colors.black45,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, size: 32, color: color),
+            ),
+            title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+            subtitle: Text(
+              "$count",
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+            ),
+            trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+          ),
         ),
       ),
     );

@@ -18,8 +18,6 @@ class _CameraAddScreenState
   final rtspController =
   TextEditingController();
 
-  final statusController =
-  TextEditingController();
 
   final CameraApi cameraApi = CameraApi();
 
@@ -52,21 +50,11 @@ class _CameraAddScreenState
 
             const SizedBox(height: 15),
 
-            TextField(
-              controller: statusController,
-              decoration: const InputDecoration(
-                labelText: "Status",
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
             ElevatedButton(
               onPressed: () async {
 
                 if (cameraNameController.text.isEmpty ||
-                    rtspController.text.isEmpty ||
-                    statusController.text.isEmpty) {
+                    rtspController.text.isEmpty) {
 
                   ScaffoldMessenger.of(context)
                       .showSnackBar(
@@ -84,7 +72,7 @@ class _CameraAddScreenState
                 await cameraApi.saveCamera(
                   cameraNameController.text,
                   rtspController.text,
-                  statusController.text,
+                  "Active", // Automatically set status to Active
                 );
 
                 if (success) {

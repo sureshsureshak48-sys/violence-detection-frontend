@@ -24,4 +24,23 @@ class EvidenceApi {
       );
     }
   }
+
+  Future<List<dynamic>> getEvidenceByIncident(int incidentId) async {
+    final response = await http.get(
+      Uri.parse("${ApiService.evidence}/incident/$incidentId"),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load evidence for incident $incidentId");
+    }
+  }
+
+  Future<bool> deleteEvidence(int id) async {
+    final response = await http.delete(
+      Uri.parse("${ApiService.evidence}/$id"),
+    );
+    return response.statusCode == 200;
+  }
 }

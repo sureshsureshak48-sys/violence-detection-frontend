@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'services/control_room_api.dart';
+import 'incident_evidence_screen.dart';
 
 class ControlRoomScreen extends StatefulWidget {
   const ControlRoomScreen({super.key});
@@ -37,7 +38,7 @@ class _ControlRoomScreenState extends State<ControlRoomScreen> {
     try {
       final data = await controlRoomApi.getPendingIncidents();
       setState(() {
-        incidents = data;
+        incidents = data.reversed.toList();
         loading = false;
       });
     } catch (e) {
@@ -84,9 +85,22 @@ class _ControlRoomScreenState extends State<ControlRoomScreen> {
             return Card(
               elevation: 4,
               margin: const EdgeInsets.all(8),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => IncidentEvidenceScreen(
+                        incidentId: incident["id"],
+                        incidentType: incident["incidentType"] ?? "Unknown",
+                        createdAt: incident["createdAt"] ?? "Unknown Time",
+                      ),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -146,6 +160,7 @@ class _ControlRoomScreenState extends State<ControlRoomScreen> {
                       ],
                     ),
                   ],
+                ),
                 ),
               ),
             );

@@ -1,8 +1,8 @@
 class ApiService {
 
   static const String baseUrl =
-      "http://10.49.211.63:8081";
-  static const String flaskUrl = "http://10.49.211.63:5000";
+      "http://10.245.136.63:8081";
+  static const String flaskUrl = "http://10.245.136.63:5000";
 
   static const String login =
       "$baseUrl/auth/login";

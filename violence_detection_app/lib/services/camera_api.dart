@@ -38,4 +38,11 @@ class CameraApi {
     return response.statusCode == 200 ||
         response.statusCode == 201;
   }
+
+  Future<bool> deleteCamera(int id) async {
+    final response = await http.delete(
+      Uri.parse("${ApiService.cameras}/$id"),
+    );
+    return response.statusCode == 200;
+  }
 }

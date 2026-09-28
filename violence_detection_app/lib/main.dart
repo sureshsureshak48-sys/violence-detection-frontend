@@ -1,32 +1,109 @@
 import 'package:flutter/material.dart';
 import 'dashboard_screen.dart';
+import 'splash_screen.dart';
 import 'services/auth_api.dart';
 import 'register_screen.dart';
+import 'incident_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'services/api_service.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+void _handleNotificationPayload(String? payload) {
+  if (payload != null && payload.isNotEmpty) {
+    try {
+      final data = jsonDecode(payload);
+      if (data["screen"] == "incidents") {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (context) => const IncidentScreen(),
+          ),
+        );
+      }
+    } catch (e) {
+      print("Error parsing notification payload: $e");
+    }
+  }
+}
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print("Background notification: ${message.notification?.title}");
+}
+
 Future<void> main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const InitializationSettings initSettings = InitializationSettings(android: androidSettings);
-  await flutterLocalNotificationsPlugin.initialize(initSettings);
-  const AndroidNotificationChannel channel = AndroidNotificationChannel( 'high_importance_channel', 'High Importance Notifications', importance: Importance.high, );
-  await flutterLocalNotificationsPlugin .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>() ?.createNotificationChannel(channel);
+  
+  final InitializationSettings initSettings = const InitializationSettings(android: androidSettings);
+  
+  await flutterLocalNotificationsPlugin.initialize(
+    initSettings,
+    onDidReceiveNotificationResponse: (NotificationResponse response) {
+      _handleNotificationPayload(response.payload);
+    },
+  );
+  
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'silent_notification_channel', 
+    'Silent Notifications', 
+    importance: Importance.defaultImportance,
+    playSound: false,
+  );
+  await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
 
-
-  String? token =
-  await FirebaseMessaging.instance.getToken();
-
+  String? token = await FirebaseMessaging.instance.getToken();
   print("FCM TOKEN = $token");
+
+  // Handle tap when app was terminated
+  FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+    if (message != null) {
+      final payload = jsonEncode(message.data);
+      _handleNotificationPayload(payload);
+    }
+  });
+
+  // Handle tap when app was in background
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    final payload = jsonEncode(message.data);
+    _handleNotificationPayload(payload);
+  });
+
+  // Register device FCM listener on app startup
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    RemoteNotification? notification = message.notification;
+    if (notification != null) {
+      final payload = jsonEncode(message.data);
+      flutterLocalNotificationsPlugin.show(
+        notification.hashCode,
+        notification.title,
+        notification.body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'silent_notification_channel',
+            'Silent Notifications',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+            playSound: false,
+          ),
+        ),
+        payload: payload,
+      );
+    }
+  });
 
   runApp(const MyApp());
 }
@@ -45,24 +122,6 @@ Future<void> initFcm(int userId) async {
     );
     print("FCM token saved");
   }
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    RemoteNotification? notification = message.notification;
-    if (notification != null) {
-      flutterLocalNotificationsPlugin.show(
-        notification.hashCode,
-        notification.title,
-        notification.body,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'high_importance_channel',
-            'High Importance Notifications',
-            importance: Importance.high,
-            priority: Priority.high,
-          ),
-        ),
-      );
-    }
-  });
 }
 
 class MyApp extends StatelessWidget {
@@ -72,7 +131,51 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: LoginScreen(),
+      navigatorKey: navigatorKey,
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.blue,
+          elevation: 0,
+          centerTitle: true,
+          iconTheme: IconThemeData(color: Colors.white),
+          titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 4,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            elevation: 2,
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.grey[100],
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.blue, width: 1.5),
+          ),
+          labelStyle: const TextStyle(color: Colors.black54),
+          prefixIconColor: Colors.black54,
+        ),
+      ),
+      home: const SplashScreen(),
     );
   }
 }
@@ -99,8 +202,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-
       appBar: AppBar(
         centerTitle: true,
         title: const Text(
@@ -218,6 +319,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       int userId = result["userId"];
                       await initFcm(userId);
+
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setInt("userId", userId);
+                      await prefs.setString("role", result["role"] ?? "USER");
+                      await prefs.setString("username", usernameController.text);
 
                       Navigator.push(
                         context,
